@@ -19,7 +19,7 @@ venv/
 # Mac
 .DS_Store
 
-# Results (optional but recommended)
+# Results 
 results/
 data/raw/
 data/interim/
