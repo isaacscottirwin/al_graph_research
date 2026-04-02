@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.sparse.linalg import eigsh
 from al_graph_research.graphs.signed_laplacian import SignedLaplacian
-from al_graph_research.graphs.knn_graph import KNNGraph
 
 
 class Metrics:
