@@ -6,8 +6,8 @@ from scipy.sparse.linalg import eigsh
 
 class KNNGraph:
         def __init__(self, number_neigbors, kernal, data) -> None:
-                self.G_nx = None
-                self.A_sp = None
+                self.G_nx: nx.Graph = None # type: ignore
+                self.A_sp: sp.csr_matrix = None # type: ignore
 
                 self.create_graph(data, kernal, number_neigbors)
         
@@ -75,8 +75,24 @@ class KNNGraph:
 
                 A = A.tocsr() # type: ignore
 
-                self.A_sp = A
+                self.A_sp = A # type: ignore
                 self.G_nx = nx.from_scipy_sparse_array(A)
+        
+        def copy(self):
+                """
+                Create a copy of the k-NN graph.
+
+                Returns
+                -------
+                new : KNNGraph
+                    A new instance of the k-NN graph with the same parameters and structure.
+                """
+                new = self.__class__.__new__(self.__class__)
+                new.G_nx = self.G_nx.copy()
+                new.A_sp = self.A_sp.copy()
+                return new
+                
+
         
         def eigv_nd(self, L: sp.spmatrix, starting_idx: int = 1, ending_idx: int = 3) -> tuple[np.ndarray, np.ndarray]:
                 """
