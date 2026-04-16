@@ -9,15 +9,19 @@ from al_graph_research.graphs.graph_modifications import EdgeModification
 from al_graph_research.graphs.graph_analysis import GraphAnalysis
 from al_graph_research.experiments.only_edges.batch_sequences import BatchSequences
 from al_graph_research.experiments.only_edges.metrics import Metrics
+from typing import Literal
 
 class EdgeAlterationExperiment:
     def __init__(
         self,
         n_runs: int,
-        num_rounds: int,
+        num_rounds: int | Literal["max"],
         number_neighbors: int,
         kernel: str,
         alteration_strategy: str, # "zero" or "negate"
+        graph_construction_method: str = "partner", # "legacy" or "partner"
+        starting_idx = 1,
+        ending_idx = 3,
         empty_val: int = 0,
         rng: np.random.Generator | None = None,
     ) -> None:
@@ -29,6 +33,9 @@ class EdgeAlterationExperiment:
             raise ValueError("alteration_strategy must be 'zero' or 'negate'.")
         else:
             self.alteration_strategy = alteration_strategy
+        self.graph_construction_method = graph_construction_method
+        self.starting_idx = starting_idx
+        self.ending_idx = ending_idx
         self.empty_val = empty_val
         self.rng = rng if rng is not None else np.random.default_rng()
 
@@ -43,7 +50,7 @@ class EdgeAlterationExperiment:
         return ExperimentResult(runs=runs)
         
     def _generate_batch_sequences(self, dataset) -> tuple[list[list[list[tuple[int, int]]]], int]:
-        graph = KNNGraph(self.number_neighbors, self.kernel, dataset.data)
+        graph = KNNGraph(self.number_neighbors, self.kernel, dataset.data, construction_method=self.graph_construction_method)
         adjacency = graph.A_sp
         _, _, _, cross_edges = GraphAnalysis.adjacency_block(adjacency, dataset.labels)
 
@@ -65,10 +72,10 @@ class EdgeAlterationExperiment:
         labels = dataset.labels
         N = len(labels)
 
-        graph = KNNGraph(self.number_neighbors, self.kernel, data)
+        graph = KNNGraph(self.number_neighbors, self.kernel, data, construction_method=self.graph_construction_method)
         adjacency = graph.A_sp
         laplacian = SignedLaplacian(adjacency).L_signed
-        _, embedding = graph.eigv_nd(laplacian, starting_idx=1, ending_idx=3)
+        _, embedding = graph.eigv_nd(laplacian, starting_idx=self.starting_idx, ending_idx=self.ending_idx)
 
         labeled_indices = self._select_initial_indices(dataset)
 
@@ -89,6 +96,7 @@ class EdgeAlterationExperiment:
             accuracy_history=[acc],
             margin_history=[],
             delta_l2_history=[],
+            lam1_history=[],
             lam2_history=[],
             gap23_history=[],
             kappa_history=[],
@@ -121,8 +129,8 @@ class EdgeAlterationExperiment:
     
     def _update_metrics(self, run_state: RunState, adjacency, prediction=None) -> None:
         run_state.lam2_history.append(Metrics.lam2(adjacency))
+        run_state.lam1_history.append(Metrics.lam1(adjacency))
         run_state.gap23_history.append(Metrics.gap23(adjacency))
-        run_state.kappa_history.append(Metrics.kappa(adjacency))
 
     def _select_initial_indices(self, dataset) -> list[int]:
         if hasattr(dataset, "cluster_id") and dataset.cluster_id is not None:
@@ -177,7 +185,7 @@ class EdgeAlterationExperiment:
         edges = self.batch_sequences[run_state.run_id][round_idx]
         run_state.adjacency = self._apply_edge_alterations(run_state.adjacency, edges)
         run_state.laplacian = SignedLaplacian(run_state.adjacency).L_signed
-        _, run_state.embedding = run_state.graph.eigv_nd(run_state.laplacian, starting_idx=1, ending_idx=3)
+        _, run_state.embedding = run_state.graph.eigv_nd(run_state.laplacian, starting_idx=self.starting_idx, ending_idx=self.ending_idx)
         run_state.embedding_history.append(run_state.embedding.copy())
         prediction = self._predict(run_state.adjacency, run_state.y_train, labels)
         run_state.prediction_history.append(prediction.copy())

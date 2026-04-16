@@ -5,7 +5,7 @@ class BatchSequences:
         self,
         cross_edges: list[tuple[int, int]],
         n_runs: int,
-        desired_rounds: int,
+        desired_rounds: int | str, # "max" or positive integer
         seed: int | None = None,
     ) -> None:
         self.cross_edges = cross_edges
@@ -18,20 +18,30 @@ class BatchSequences:
         total_edges = len(self.cross_edges)
         if total_edges == 0:
             return [], 0, 0, 0
+        if isinstance(self.desired_rounds, str):
+            if self.desired_rounds == "max": 
+                edges_per_round = 1
+                num_rounds = total_edges
+                batch_sequences: list[list[list[tuple[int, int]]]] = []
+                for _ in range(self.n_runs):
+                    edges_shuffled = self.cross_edges.copy()
+                    self.rng.shuffle(edges_shuffled)
+                    batches = [[edge] for edge in edges_shuffled]
+                    batch_sequences.append(batches)
+            else:
+                raise ValueError("Invalid value for desired_rounds. Must be 'max' or a positive integer.")
+        elif isinstance(self.desired_rounds, int) and self.desired_rounds > 0:
+            edges_per_round = max(1, total_edges // self.desired_rounds)
+            batch_sequences: list[list[list[tuple[int, int]]]] = [] # type: ignore
+            for _ in range(self.n_runs):
+                edges_shuffled = self.cross_edges.copy()
+                self.rng.shuffle(edges_shuffled)
 
-        edges_per_round = max(1, total_edges // self.desired_rounds)
+                batches = [
+                    edges_shuffled[i:i + edges_per_round]
+                    for i in range(0, total_edges, edges_per_round)
+                ]
+                batch_sequences.append(batches)
 
-        batch_sequences: list[list[list[tuple[int, int]]]] = []
-
-        for _ in range(self.n_runs):
-            edges_shuffled = self.cross_edges.copy()
-            self.rng.shuffle(edges_shuffled)
-
-            batches = [
-                edges_shuffled[i:i + edges_per_round]
-                for i in range(0, total_edges, edges_per_round)
-            ]
-            batch_sequences.append(batches)
-
-        num_rounds = len(batch_sequences[0])
+            num_rounds = len(batch_sequences[0])
         return batch_sequences, total_edges, num_rounds, edges_per_round

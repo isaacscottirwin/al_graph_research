@@ -18,6 +18,7 @@ class RunState:
     accuracy_history: list[float] = field(default_factory=list)
     margin_history: list[float] = field(default_factory=list)
     delta_l2_history: list[float] = field(default_factory=list)
+    lam1_history: list[float] = field(default_factory=list)
     lam2_history: list[float] = field(default_factory=list)
     gap23_history: list[float] = field(default_factory=list)
     kappa_history: list[float] = field(default_factory=list)

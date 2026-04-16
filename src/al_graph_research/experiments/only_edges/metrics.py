@@ -76,6 +76,24 @@ class Metrics:
         """
         vals = Metrics._small_eigenvalues(A, k_small=2)
         return float(vals[1]) if len(vals) > 1 else float("nan")
+    
+    @staticmethod
+    def lam1(A) -> float:
+        """
+        Compute the smallest eigenvalue of the signed Laplacian.
+
+        Parameters
+        ----------
+        A : scipy.sparse.spmatrix
+            Adjacency matrix.
+
+        Returns
+        -------
+        float
+            The smallest eigenvalue, or nan if unavailable.
+        """
+        vals = Metrics._small_eigenvalues(A, k_small=1)
+        return float(vals[0]) if len(vals) > 0 else float("nan")
 
     @staticmethod
     def gap23(A) -> float:
@@ -111,6 +129,7 @@ class Metrics:
             Largest eigenvalue.
         """
         return Metrics._largest_eigenvalue(A)
+    
 
     @staticmethod
     def kappa(A) -> float:
