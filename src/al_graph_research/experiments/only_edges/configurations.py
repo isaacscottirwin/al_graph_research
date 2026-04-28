@@ -61,6 +61,28 @@ class ExperimentConfigurations:
         ending_idx=3,
         empty_val=0
     )
+    MNIST_ZERO_4 = ExperimentConfig(
+        n_runs=3,
+        num_rounds=50,
+        number_neighbors=30,
+        kernel="uniform",
+        alteration_strategy="zero",
+        graph_construction_method="partner",
+        starting_idx=0,
+        ending_idx=4,
+        empty_val=0
+    )
+    MNIST_NEGATE_4 = ExperimentConfig(
+        n_runs=3,
+        num_rounds=50,
+        number_neighbors=30,
+        kernel="uniform",
+        alteration_strategy="negate",
+        graph_construction_method="partner",
+        starting_idx=0,
+        ending_idx=4,
+        empty_val=0
+    )
     MNIST_ZERO_MAX = ExperimentConfig(
         n_runs=1,
         num_rounds="max",

@@ -154,4 +154,7 @@ class ActiveQueryingExperiment:
         return selected_indices
 
     def _run_round(self, run_state:RunState, round_idx: int, dataset)-> None:
-        raise NotImplementedError("something")
+        labels = dataset.labels
+        labeled_indicies = run_state.labeled_indices
+        
+

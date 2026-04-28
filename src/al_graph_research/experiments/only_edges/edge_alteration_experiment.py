@@ -98,6 +98,8 @@ class EdgeAlterationExperiment:
             delta_l2_history=[],
             lam1_history=[],
             lam2_history=[],
+            lam3_history=[],
+            lam4_history=[],
             gap23_history=[],
             kappa_history=[],
             embedding_history=[embedding.copy()],
@@ -128,8 +130,10 @@ class EdgeAlterationExperiment:
         )
     
     def _update_metrics(self, run_state: RunState, adjacency, prediction=None) -> None:
-        run_state.lam2_history.append(Metrics.lam2(adjacency))
-        run_state.lam1_history.append(Metrics.lam1(adjacency))
+        run_state.lam2_history.append(Metrics.lam_k(adjacency, k=2))
+        run_state.lam1_history.append(Metrics.lam_k(adjacency, k=1))
+        run_state.lam3_history.append(Metrics.lam_k(adjacency, k=3))
+        run_state.lam4_history.append(Metrics.lam_k(adjacency, k=4))
         run_state.gap23_history.append(Metrics.gap23(adjacency))
 
     def _select_initial_indices(self, dataset) -> list[int]:

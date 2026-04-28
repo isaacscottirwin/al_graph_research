@@ -60,40 +60,27 @@ class Metrics:
         return float(lmax)
 
     @staticmethod
-    def lam2(A) -> float:
+    def lam_k(A, k: int) -> float:
         """
-        Compute the second-smallest eigenvalue of the signed Laplacian.
+        Compute the k-th smallest eigenvalue of the signed Laplacian.
 
         Parameters
         ----------
         A : scipy.sparse.spmatrix
             Adjacency matrix.
+        k : int
+            Which eigenvalue to return (1 = smallest, 2 = second-smallest, etc.).
 
         Returns
         -------
         float
-            The second-smallest eigenvalue, or nan if unavailable.
+            The k-th smallest eigenvalue, or nan if unavailable.
         """
-        vals = Metrics._small_eigenvalues(A, k_small=2)
-        return float(vals[1]) if len(vals) > 1 else float("nan")
-    
-    @staticmethod
-    def lam1(A) -> float:
-        """
-        Compute the smallest eigenvalue of the signed Laplacian.
+        if k < 1:
+            raise ValueError("k must be >= 1")
 
-        Parameters
-        ----------
-        A : scipy.sparse.spmatrix
-            Adjacency matrix.
-
-        Returns
-        -------
-        float
-            The smallest eigenvalue, or nan if unavailable.
-        """
-        vals = Metrics._small_eigenvalues(A, k_small=1)
-        return float(vals[0]) if len(vals) > 0 else float("nan")
+        vals = Metrics._small_eigenvalues(A, k_small=k)
+        return float(vals[k - 1]) if len(vals) >= k else float("nan")
 
     @staticmethod
     def gap23(A) -> float:
@@ -131,24 +118,4 @@ class Metrics:
         return Metrics._largest_eigenvalue(A)
     
 
-    @staticmethod
-    def kappa(A) -> float:
-        """
-        Compute the proxy condition number lmax / lam2.
-
-        Parameters
-        ----------
-        A : scipy.sparse.spmatrix
-            Adjacency matrix.
-
-        Returns
-        -------
-        float
-            The ratio lmax / lam2, or inf if lam2 is nonpositive or not finite.
-        """
-        lam2 = Metrics.lam2(A)
-        lmax = Metrics.lmax(A)
-
-        if np.isfinite(lam2) and lam2 > 0 and np.isfinite(lmax):
-            return float(lmax / lam2)
-        return float("inf")
+    

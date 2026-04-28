@@ -20,6 +20,8 @@ class RunState:
     delta_l2_history: list[float] = field(default_factory=list)
     lam1_history: list[float] = field(default_factory=list)
     lam2_history: list[float] = field(default_factory=list)
+    lam3_history: list[float] = field(default_factory=list)
+    lam4_history: list[float] = field(default_factory=list)
     gap23_history: list[float] = field(default_factory=list)
     kappa_history: list[float] = field(default_factory=list)
     embedding_history: list[np.ndarray] = field(default_factory=list)
