@@ -8,7 +8,7 @@ from al_graph_research.active_learning.laplace_labels import LaplaceLabels
 from al_graph_research.graphs.graph_modifications import EdgeModification
 from al_graph_research.graphs.graph_analysis import GraphAnalysis
 from al_graph_research.experiments.only_edges.batch_sequences import BatchSequences
-from al_graph_research.experiments.only_edges.metrics import Metrics
+from al_graph_research.experiments.metrics import Metrics
 from typing import Literal
 
 class EdgeAlterationExperiment:
@@ -87,6 +87,7 @@ class EdgeAlterationExperiment:
         vec3 = vecs[:, 2]
         vec4 = vecs[:, 3]
         labeled_indices = self._select_initial_indices(dataset)
+        labeled_indicies_history = labeled_indices.copy()
 
         y = np.full(N, int(self.empty_val), dtype=int)
         y[labeled_indices] = labels[labeled_indices]
@@ -102,6 +103,7 @@ class EdgeAlterationExperiment:
             embedding=embedding,
             y_train=y,
             labeled_indices=labeled_indices,
+            labeled_indices_history=[labeled_indicies_history],
             accuracy_history=[acc],
             lam1_history=[lam1],
             lam2_history=[lam2],
@@ -114,7 +116,6 @@ class EdgeAlterationExperiment:
             embedding_history=[embedding.copy()],
             prediction_history=[prediction.copy()]
         )
-        self._update_metrics(run, adjacency, labels)
         return run
 
     def _predict(self, adjacency, y_train, true_labels) -> np.ndarray:
@@ -209,6 +210,7 @@ class EdgeAlterationExperiment:
         run_state.prediction_history.append(prediction.copy())
         acc = self._compute_accuracy(prediction, labels, run_state.y_train)
         run_state.accuracy_history.append(acc)
+        run_state.labeled_indices_history.append(run_state.labeled_indices.copy())
         self._update_metrics(run_state, run_state.adjacency, labels)
 
     def _apply_edge_alterations(self, adjacency, edges) -> sp.spmatrix:

@@ -15,6 +15,7 @@ class RunState:
     embedding: np.ndarray
     y_train: np.ndarray
     labeled_indices: list[int]
+    labeled_indices_history: list[list[int]] = field(default_factory=list)
     accuracy_history: list[float] = field(default_factory=list)
     lam1_history: list[float] = field(default_factory=list)
     lam2_history: list[float] = field(default_factory=list)
