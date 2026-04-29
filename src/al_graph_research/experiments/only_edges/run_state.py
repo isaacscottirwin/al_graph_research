@@ -16,13 +16,13 @@ class RunState:
     y_train: np.ndarray
     labeled_indices: list[int]
     accuracy_history: list[float] = field(default_factory=list)
-    margin_history: list[float] = field(default_factory=list)
-    delta_l2_history: list[float] = field(default_factory=list)
     lam1_history: list[float] = field(default_factory=list)
     lam2_history: list[float] = field(default_factory=list)
     lam3_history: list[float] = field(default_factory=list)
     lam4_history: list[float] = field(default_factory=list)
-    gap23_history: list[float] = field(default_factory=list)
-    kappa_history: list[float] = field(default_factory=list)
+    vec1_history: list[np.ndarray] = field(default_factory=list)
+    vec2_history: list[np.ndarray] = field(default_factory=list)
+    vec3_history: list[np.ndarray] = field(default_factory=list)
+    vec4_history: list[np.ndarray] = field(default_factory=list)
     embedding_history: list[np.ndarray] = field(default_factory=list)
     prediction_history: list[np.ndarray] = field(default_factory=list)

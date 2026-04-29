@@ -71,20 +71,24 @@ def plot_metric_comparison(results, attr_name, labels, title=None, show_std=True
 
 def plot_same_metric_comparison(result, attr_names, title=None, show_std=True):
     """
-    Compare a metric across multiple experiments without legend.
+    Compare multiple metrics from the same ExperimentResult.
 
     Parameters
     ----------
-    results : ExperimentResult
-    attr_name : list[str]
+    result : ExperimentResult
+        The experiment result object.
+    attr_names : list[str]
+        List of metric attribute names to plot.
     title : str, optional
+        Title for the plot.
     show_std : bool
+        If True, plot mean +/- std shading.
     """
     plt.figure(figsize=(8, 5))
 
-    for attr_name in attr_names:  
-        mean = result.mean_metric(attr_name)
-        std = result.std_metric(attr_name)
+    for attr_name in attr_names:
+        mean = np.asarray(result.mean_metric(attr_name))
+        std = np.asarray(result.std_metric(attr_name))
 
         x = np.arange(len(mean))
         plt.plot(x, mean, label=attr_name)
@@ -93,8 +97,7 @@ def plot_same_metric_comparison(result, attr_names, title=None, show_std=True):
             plt.fill_between(x, mean - std, mean + std, alpha=0.2)
 
     plt.xlabel("Step")
-    plt.ylabel(YLABEL_MAP.get(attr_names[0], attr_names[0])) # type: ignore
-
+    plt.ylabel("Metric Value")
 
     if title is not None:
         plt.title(title)
@@ -354,6 +357,54 @@ def animate_embedding_true_vs_pred(run_state, true_labels, save_path=None, dims=
         ax_pred.set_title(f"Predicted labels, step {frame}")
 
     anim = FuncAnimation(fig, update, frames=len(embeddings), interval=500) # type: ignore
+
+    if save_path is not None:
+        anim.save(save_path)
+
+    plt.close(fig)
+    return anim
+
+def animate_eigenvectors_over_time(eigenvector_one_history, eigenvector_two_history, eigenvector_three_history, 
+                                   eigenvector_four_history, title="Eigenvectors over Time", save_path=None):
+    assert (
+        len(eigenvector_one_history)
+        == len(eigenvector_two_history)
+        == len(eigenvector_three_history)
+        == len(eigenvector_four_history)
+    ), "All eigenvector histories must have the same length."
+
+    time = len(eigenvector_one_history)
+    n = len(eigenvector_one_history[0])
+    x = np.arange(n)
+
+    fig = plt.figure(figsize=(12, 8))
+    ax = plt.subplot(1, 1, 1)
+
+    all_vals = np.concatenate([
+        np.asarray(eigenvector_one_history).ravel(),
+        np.asarray(eigenvector_two_history).ravel(),
+        np.asarray(eigenvector_three_history).ravel(),
+        np.asarray(eigenvector_four_history).ravel(),
+    ])
+
+    y_min = np.nanmin(all_vals)
+    y_max = np.nanmax(all_vals)
+
+    def update(frame):
+        ax.clear()
+
+        ax.plot(x, eigenvector_one_history[frame], label="Eigenvector 1")
+        ax.plot(x, eigenvector_two_history[frame], label="Eigenvector 2")
+        ax.plot(x, eigenvector_three_history[frame], label="Eigenvector 3")
+        ax.plot(x, eigenvector_four_history[frame], label="Eigenvector 4")
+
+        ax.set_xlabel("Sorted node index")
+        ax.set_ylabel("Eigenvector value")
+        ax.set_ylim(y_min, y_max)
+        ax.set_title(f"{title} (Step {frame})")
+        ax.legend()
+
+    anim = FuncAnimation(fig, update, frames=time, interval=500) # type: ignore
 
     if save_path is not None:
         anim.save(save_path)

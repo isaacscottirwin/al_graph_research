@@ -5,9 +5,9 @@ from al_graph_research.graphs.signed_laplacian import SignedLaplacian
 
 class Metrics:
     @staticmethod
-    def _small_eigenvalues(A, k_small: int = 4) -> np.ndarray:
+    def _small_eignenvalvec(A, k_small: int = 4) -> tuple[np.ndarray, np.ndarray]:
         """
-        Compute the smallest eigenvalues of the signed Laplacian.
+        Compute the smallest eigenvalues and corresponding eigenvectors of the signed Laplacian.
 
         Parameters
         ----------
@@ -18,104 +18,76 @@ class Metrics:
 
         Returns
         -------
-        ndarray
-            Sorted smallest eigenvalues in ascending order.
+        tuple[ndarray, ndarray]
+            Sorted smallest eigenvalues and their corresponding eigenvectors.
         """
         L = SignedLaplacian(A).L_signed
         n, _ = L.shape # type: ignore
 
         if k_small >= n:
-            vals = np.linalg.eigvalsh(L.toarray())
-            vals = np.sort(np.real(vals))[:k_small]
+            vals, vecs = np.linalg.eig(L.toarray())
+            idx = np.argsort(np.real(vals))[:k_small]
+            vals = vals[idx]
+            vecs = vecs[:, idx]
         else:
-            vals = eigsh(L, k=k_small, which="SM", return_eigenvectors=False)
-            vals = np.sort(np.real(vals))
+            vals, vecs = eigsh(L, k=k_small, which="SM")
+            idx = np.argsort(np.real(vals))
+            vals = vals[idx]
+            vecs = vecs[:, idx]
 
-        return vals
-
+        return vals, vecs
+    
     @staticmethod
-    def _largest_eigenvalue(A) -> float:
+    def eig_k(A, k: int) -> tuple[np.ndarray, np.ndarray]:
         """
-        Compute the largest eigenvalue of the signed Laplacian.
-
-        Parameters
-        ----------
-        A : scipy.sparse.spmatrix
-            Adjacency matrix.
-
-        Returns
-        -------
-        float
-            Largest eigenvalue.
-        """
-        L = SignedLaplacian(A).L_signed
-        n, _ = L.shape # type: ignore
-
-        if n <= 3:
-            lmax = np.max(np.linalg.eigvalsh(L.toarray()))
-        else:
-            lmax = eigsh(L, k=1, which="LA", return_eigenvectors=False)[0]
-            lmax = np.real(lmax)
-
-        return float(lmax)
-
-    @staticmethod
-    def lam_k(A, k: int) -> float:
-        """
-        Compute the k-th smallest eigenvalue of the signed Laplacian.
+        Compute the k smallest eigenvalue–eigenvector pairs of the signed Laplacian.
 
         Parameters
         ----------
         A : scipy.sparse.spmatrix
             Adjacency matrix.
         k : int
-            Which eigenvalue to return (1 = smallest, 2 = second-smallest, etc.).
+            Number of eigenpairs to compute.
 
         Returns
         -------
-        float
-            The k-th smallest eigenvalue, or nan if unavailable.
+        (vals, vecs) : tuple
+            vals : (k,) array of eigenvalues (ascending)
+            vecs : (n, k) array of corresponding eigenvectors (columns)
         """
         if k < 1:
             raise ValueError("k must be >= 1")
 
-        vals = Metrics._small_eigenvalues(A, k_small=k)
-        return float(vals[k - 1]) if len(vals) >= k else float("nan")
+        vals, vecs = Metrics._small_eignenvalvec(A, k_small=k)
+
+        if len(vals) < k:
+            n = A.shape[0]
+            return (
+                np.full((k,), np.nan),
+                np.full((n, k), np.nan),
+            )
+
+        return vals, vecs
 
     @staticmethod
-    def gap23(A) -> float:
+    def sort_history(
+        history: list[np.ndarray],
+        descending: bool = True
+    ) -> np.ndarray:
         """
-        Compute the spectral gap lambda_3 - lambda_2 of the signed Laplacian.
-
-        Parameters
-        ----------
-        A : scipy.sparse.spmatrix
-            Adjacency matrix.
-
-        Returns
-        -------
-        float
-            The gap lambda_3 - lambda_2, or nan if unavailable.
+        Align eigenvector signs over time, then sort each vector independently.
         """
-        vals = Metrics._small_eigenvalues(A, k_small=3)
-        return float(vals[2] - vals[1]) if len(vals) > 2 else float("nan")
+        H = np.stack(history)  # (T, n)
 
-    @staticmethod
-    def lmax(A) -> float:
-        """
-        Compute the largest eigenvalue of the signed Laplacian.
+        # --- Sign alignment ---
+        H_aligned = H.copy()
+        for t in range(1, H.shape[0]):
+            if np.dot(H_aligned[t - 1], H_aligned[t]) < 0:
+                H_aligned[t] *= -1
 
-        Parameters
-        ----------
-        A : scipy.sparse.spmatrix
-            Adjacency matrix.
+        # --- Sorting ---
+        order = np.argsort(H_aligned, axis=1)
+        if descending:
+            order = order[:, ::-1]
 
-        Returns
-        -------
-        float
-            Largest eigenvalue.
-        """
-        return Metrics._largest_eigenvalue(A)
-    
-
-    
+        return np.take_along_axis(H_aligned, order, axis=1)

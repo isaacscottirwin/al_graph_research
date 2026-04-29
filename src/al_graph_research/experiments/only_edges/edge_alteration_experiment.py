@@ -77,6 +77,15 @@ class EdgeAlterationExperiment:
         laplacian = SignedLaplacian(adjacency).L_signed
         _, embedding = graph.eigv_nd(laplacian, starting_idx=self.starting_idx, ending_idx=self.ending_idx)
 
+        vals, vecs = Metrics.eig_k(adjacency, k=4)
+        lam1 = vals[0]
+        lam2 = vals[1]
+        lam3 = vals[2]
+        lam4 = vals[3]
+        vec1 = vecs[:, 0]
+        vec2 = vecs[:, 1]
+        vec3 = vecs[:, 2]
+        vec4 = vecs[:, 3]
         labeled_indices = self._select_initial_indices(dataset)
 
         y = np.full(N, int(self.empty_val), dtype=int)
@@ -94,18 +103,18 @@ class EdgeAlterationExperiment:
             y_train=y,
             labeled_indices=labeled_indices,
             accuracy_history=[acc],
-            margin_history=[],
-            delta_l2_history=[],
-            lam1_history=[],
-            lam2_history=[],
-            lam3_history=[],
-            lam4_history=[],
-            gap23_history=[],
-            kappa_history=[],
+            lam1_history=[lam1],
+            lam2_history=[lam2],
+            lam3_history=[lam3],
+            lam4_history=[lam4],
+            vec1_history=[vec1],
+            vec2_history=[vec2],
+            vec3_history=[vec3],
+            vec4_history=[vec4],
             embedding_history=[embedding.copy()],
             prediction_history=[prediction.copy()]
         )
-        self._update_metrics(run, adjacency, prediction)
+        self._update_metrics(run, adjacency, labels)
         return run
 
     def _predict(self, adjacency, y_train, true_labels) -> np.ndarray:
@@ -129,12 +138,17 @@ class EdgeAlterationExperiment:
             empty_val=self.empty_val,
         )
     
-    def _update_metrics(self, run_state: RunState, adjacency, prediction=None) -> None:
-        run_state.lam2_history.append(Metrics.lam_k(adjacency, k=2))
-        run_state.lam1_history.append(Metrics.lam_k(adjacency, k=1))
-        run_state.lam3_history.append(Metrics.lam_k(adjacency, k=3))
-        run_state.lam4_history.append(Metrics.lam_k(adjacency, k=4))
-        run_state.gap23_history.append(Metrics.gap23(adjacency))
+    def _update_metrics(self, run_state: RunState, adjacency, labels) -> None:
+        vals, vecs = Metrics.eig_k(adjacency, k=4)
+
+        run_state.lam1_history.append(vals[0])
+        run_state.lam2_history.append(vals[1])
+        run_state.lam3_history.append(vals[2])
+        run_state.lam4_history.append(vals[3])
+        run_state.vec1_history.append(vecs[:, 0])
+        run_state.vec2_history.append(vecs[:, 1])
+        run_state.vec3_history.append(vecs[:, 2])
+        run_state.vec4_history.append(vecs[:, 3])
 
     def _select_initial_indices(self, dataset) -> list[int]:
         if hasattr(dataset, "cluster_id") and dataset.cluster_id is not None:
@@ -195,8 +209,8 @@ class EdgeAlterationExperiment:
         run_state.prediction_history.append(prediction.copy())
         acc = self._compute_accuracy(prediction, labels, run_state.y_train)
         run_state.accuracy_history.append(acc)
-        self._update_metrics(run_state, run_state.adjacency, prediction)
-    
+        self._update_metrics(run_state, run_state.adjacency, labels)
+
     def _apply_edge_alterations(self, adjacency, edges) -> sp.spmatrix:
         A = adjacency.copy()
         for i, j in edges:
