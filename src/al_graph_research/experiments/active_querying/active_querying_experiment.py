@@ -18,6 +18,7 @@ class ActiveQueryingExperiment:
         num_queries_per_round: int,
         kernel: str,
         alteration_strategy: str, # "zero" or "negate", "baseline"
+        specified_starting_seeds: list[list[int]] | None = None, # List of lists of indices for each run, or None to use random selection
         graph_construction_method: str = "partner", # "legacy" or "partner"
         max_iterations: int = 500,
         starting_idx = 1,
@@ -35,6 +36,8 @@ class ActiveQueryingExperiment:
             raise ValueError("alteration_strategy must be 'zero', 'negate' or 'baseline'.")
         else:
             self.alteration_strategy = alteration_strategy
+
+        self.specified_starting_seeds = specified_starting_seeds
         self.graph_construction_method = graph_construction_method
         self.max_iterations = max_iterations
         self.starting_idx = starting_idx
@@ -44,6 +47,18 @@ class ActiveQueryingExperiment:
 
 
     def run(self, dataset) -> ExperimentResult:
+        if self.specified_starting_seeds is not None:
+            if len(self.specified_starting_seeds) != self.n_runs:
+                raise ValueError("Length of specified_starting_seeds must match n_runs.")
+
+            if hasattr(dataset, "cluster_id") and dataset.cluster_id is not None:
+                expected = len(np.unique(dataset.cluster_id))
+            else:
+                expected = len(np.unique(dataset.labels))
+
+            if any(len(seeds) != expected for seeds in self.specified_starting_seeds):
+                raise ValueError(f"Each seed list must have {expected} indices.")
+
         runs = []
         for run_id in range(self.n_runs):
             run_state = self._initialize_run(dataset, run_id)
@@ -75,8 +90,11 @@ class ActiveQueryingExperiment:
         vec2 = vecs[:, 1]
         vec3 = vecs[:, 2]
         vec4 = vecs[:, 3]
-        labeled_indices = self._select_initial_indices(dataset, self.num_starting_labels_per_class)
-        labeled_indices_history = labeled_indices.copy()
+        if self.specified_starting_seeds is not None:
+            labeled_indices = self.specified_starting_seeds[run_id].copy()
+        else:
+            labeled_indices = self._select_initial_indices(dataset, self.num_starting_labels_per_class)
+        labeled_indices_history = [labeled_indices.copy()]
 
         y = np.full(N, int(self.empty_val), dtype=int)
         y[labeled_indices] = labels[labeled_indices]
@@ -93,7 +111,7 @@ class ActiveQueryingExperiment:
             altered_edges=set(),
             y_train=y,
             labeled_indices=labeled_indices,
-            labeled_indices_history=[labeled_indices_history],
+            labeled_indices_history=labeled_indices_history,
             accuracy_history=[acc],
             lam1_history=[lam1],
             lam2_history=[lam2],
