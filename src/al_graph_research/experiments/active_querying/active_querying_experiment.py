@@ -4,7 +4,7 @@ from al_graph_research.experiments.active_querying.run_state import RunState
 from al_graph_research.experiments.active_querying.experiment_result import ExperimentResult
 from al_graph_research.graphs.knn_graph import KNNGraph
 from al_graph_research.graphs.signed_laplacian import SignedLaplacian
-from al_graph_research.active_learning.laplace_labels import LaplaceLabels
+from al_graph_research.active_learning.label_propagation import LabelPropagation
 from al_graph_research.graphs.graph_modifications import EdgeModification
 from al_graph_research.experiments.metrics import Metrics
 
@@ -12,12 +12,13 @@ class ActiveQueryingExperiment:
     def __init__(
         self,
         n_runs: int,
-        accuracy_level: float,
+        n_rounds: int,
         number_neighbors: int,
         num_starting_labels_per_class: int,
         num_queries_per_round: int,
         kernel: str,
         alteration_strategy: str, # "zero" or "negate", "baseline"
+        model_type: str, # "laplace" or "poisson"
         specified_starting_seeds: list[list[int]] | None = None, # List of lists of indices for each run, or None to use random selection
         graph_construction_method: str = "partner", # "legacy" or "partner"
         max_iterations: int = 500,
@@ -27,7 +28,7 @@ class ActiveQueryingExperiment:
         rng: np.random.Generator | None = None,
     ) -> None:
         self.n_runs = n_runs
-        self.accuracy_level = accuracy_level
+        self.n_rounds = n_rounds
         self.number_neighbors = number_neighbors
         self.num_starting_labels_per_class = num_starting_labels_per_class
         self.num_queries_per_round = num_queries_per_round
@@ -36,7 +37,7 @@ class ActiveQueryingExperiment:
             raise ValueError("alteration_strategy must be 'zero', 'negate' or 'baseline'.")
         else:
             self.alteration_strategy = alteration_strategy
-
+        self.model_type = model_type
         self.specified_starting_seeds = specified_starting_seeds
         self.graph_construction_method = graph_construction_method
         self.max_iterations = max_iterations
@@ -59,19 +60,14 @@ class ActiveQueryingExperiment:
             if any(len(seeds) != expected for seeds in self.specified_starting_seeds):
                 raise ValueError(f"Each seed list must have {expected} indices.")
 
-        runs = []
-        for run_id in range(self.n_runs):
-            run_state = self._initialize_run(dataset, run_id)
-            num_rounds = 0
-            while (run_state.accuracy_history[-1] < self.accuracy_level
-            and num_rounds < self.max_iterations):
+        runs = [self.initialize_run(dataset, run_id) for run_id in range(self.n_runs)]
+        for _ in range(self.n_rounds):
+            for run_state in runs:
                 self._run_round(run_state, dataset)
-                num_rounds += 1
-            runs.append(run_state)
         return ExperimentResult(runs=runs)
 
 
-    def _initialize_run(self, dataset, run_id: int) -> RunState:
+    def initialize_run(self, dataset, run_id: int) -> RunState:
         data = dataset.data
         labels = dataset.labels
         N = len(labels)
@@ -128,8 +124,8 @@ class ActiveQueryingExperiment:
 
        
     def _predict(self, adjacency, y_train, true_labels) -> tuple[np.ndarray, np.ndarray]:
-        scores = LaplaceLabels.labels_propagation(adjacency, y_train, self.empty_val)
-        prediction = LaplaceLabels.laplaceClassifierWithVec(scores)
+        scores = LabelPropagation.labels_propagation(adjacency, y_train, self.empty_val, model_type=self.model_type)
+        prediction = LabelPropagation.classifier_with_vec(scores)
 
         acc_norm = np.mean(prediction == true_labels)
         acc_flip = np.mean(-prediction == true_labels)
@@ -141,7 +137,7 @@ class ActiveQueryingExperiment:
         return prediction, scores
 
     def _compute_accuracy(self, prediction, true_labels, y_train) -> float:
-        return LaplaceLabels.classifierAccuracy_Laplace_Vec(
+        return LabelPropagation.classifier_accuracy_vec(
             prediction,
             true_labels,
             method="unlabeled_only",

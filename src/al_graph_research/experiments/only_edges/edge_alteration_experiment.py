@@ -4,7 +4,7 @@ from al_graph_research.experiments.only_edges.run_state import RunState
 from al_graph_research.experiments.only_edges.experiment_result import ExperimentResult
 from al_graph_research.graphs.knn_graph import KNNGraph
 from al_graph_research.graphs.signed_laplacian import SignedLaplacian
-from al_graph_research.active_learning.laplace_labels import LaplaceLabels
+from al_graph_research.active_learning.label_propagation import LabelPropagation
 from al_graph_research.graphs.graph_modifications import EdgeModification
 from al_graph_research.graphs.graph_analysis import GraphAnalysis
 from al_graph_research.experiments.only_edges.batch_sequences import BatchSequences
@@ -19,6 +19,7 @@ class EdgeAlterationExperiment:
         number_neighbors: int,
         kernel: str,
         alteration_strategy: str, # "zero" or "negate"
+        model_type: str, # "laplace" or "poisson"
         graph_construction_method: str = "partner", # "legacy" or "partner"
         starting_idx = 1,
         ending_idx = 3,
@@ -33,6 +34,7 @@ class EdgeAlterationExperiment:
             raise ValueError("alteration_strategy must be 'zero' or 'negate'.")
         else:
             self.alteration_strategy = alteration_strategy
+        self.model_type = model_type
         self.graph_construction_method = graph_construction_method
         self.starting_idx = starting_idx
         self.ending_idx = ending_idx
@@ -43,7 +45,7 @@ class EdgeAlterationExperiment:
 
     def run(self, dataset) -> ExperimentResult:
         self.batch_sequences, self.actual_num_rounds = self._generate_batch_sequences(dataset)
-        runs = [self._initialize_run(dataset, run_id) for run_id in range(self.n_runs)]
+        runs = [self.initialize_run(dataset, run_id) for run_id in range(self.n_runs)]
         for round_idx in range(self.actual_num_rounds):
             for run_state in runs:
                 self._run_round(run_state, round_idx, dataset)
@@ -67,7 +69,7 @@ class EdgeAlterationExperiment:
 
         return batch_sequences, actual_num_rounds
         
-    def _initialize_run(self, dataset, run_id: int) -> RunState:
+    def initialize_run(self, dataset, run_id: int) -> RunState:
         data = dataset.data
         labels = dataset.labels
         N = len(labels)
@@ -119,8 +121,8 @@ class EdgeAlterationExperiment:
         return run
 
     def _predict(self, adjacency, y_train, true_labels) -> np.ndarray:
-        scores = LaplaceLabels.labels_propagation(adjacency, y_train, self.empty_val)
-        prediction = LaplaceLabels.laplaceClassifierWithVec(scores)
+        scores = LabelPropagation.labels_propagation(adjacency, y_train, self.empty_val, model_type=self.model_type)
+        prediction = LabelPropagation.classifier_with_vec(scores)
 
         acc_norm = np.mean(prediction == true_labels)
         acc_flip = np.mean(-prediction == true_labels)
@@ -131,7 +133,7 @@ class EdgeAlterationExperiment:
         return prediction
 
     def _compute_accuracy(self, prediction, true_labels, y_train) -> float:
-        return LaplaceLabels.classifierAccuracy_Laplace_Vec(
+        return LabelPropagation.classifier_accuracy_vec(
             prediction,
             true_labels,
             method="unlabeled_only",
