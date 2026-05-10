@@ -32,7 +32,7 @@ class LabelPropagation:
 
 
     @staticmethod
-    def get_uncertain_indicies(scores, num_pts=1):
+    def uncertainty_score(scores, labeled_indices, num_pts=1):
         """
         Identify the most uncertain points based on model(laplace or poisson) scores.
 
@@ -49,13 +49,45 @@ class LabelPropagation:
             Index (or indices) of the most uncertain points.
             Returns a single integer if `num_pts == 1`, otherwise a list.
         """
-        scores = np.asarray(scores).ravel()
-        uncertain_indices = np.argsort(np.abs(scores))[:num_pts]
+        score_values = np.asarray(scores).ravel()
+        n = score_values.shape[0]
 
-        if num_pts == 1:
-            return int(uncertain_indices[0])
-        return uncertain_indices.tolist()
+        unlabeled_mask = np.ones(n, dtype=bool)
+        unlabeled_mask[labeled_indices] = False
 
+        order = np.argsort(np.abs(score_values))
+        order = order[unlabeled_mask[order]]
+
+        return order[:num_pts].astype(int).tolist()
+    
+    @staticmethod
+    def frustration_score(scores, labeled_indicies, num_pts, adjacency):
+        # assert some assumptions
+        assert adjacency.shape == (len(scores), len(scores))
+        # convert scores into either 1 or -1 
+        # coincidentally classifier_with_vec does this
+        signature_vector = LabelPropagation.classifier_with_vec(scores)
+        frustration_vector = np.zeros(len(signature_vector), dtype=int) 
+        for row in range(len(signature_vector)):
+            #assumes no self loops in graph
+            for col in range(row + 1, len(signature_vector)):
+                if adjacency[row, col] == 0:
+                    continue
+                row_class = signature_vector[row]
+                col_class = signature_vector[col]
+                if row_class != col_class and adjacency[row, col] > 0:
+                    frustration_vector[row] += 1
+                    frustration_vector[col] += 1
+
+        unlabeled_mask = np.ones(len(signature_vector), dtype=bool)
+        unlabeled_mask[labeled_indicies] = False
+        # I want the most "frustrated" nodes
+        order = np.argsort(-frustration_vector)
+        order = order[unlabeled_mask[order]]
+        
+        return order[:num_pts].astype(int).tolist()
+
+    
     @staticmethod
     def classifier_with_vec(scores):
         """

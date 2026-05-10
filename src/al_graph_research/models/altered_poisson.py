@@ -3,10 +3,9 @@ from scipy import sparse
 import graphlearning as gl
 import graphlearning.utils as utils
 import numpy as np
-import sys
 
 class AlteredPoisson(ssl):
-    def __init__(self, W=None, class_priors=None, solver='conjugate_gradient', p=1, use_cuda=False, min_iter=50, max_iter=1000, tol=1e-3, spectral_cutoff=10):
+    def __init__(self, W=None, class_priors=None, tol=1e-3):
         """Poisson Learning
         ===================
 
@@ -28,20 +27,12 @@ class AlteredPoisson(ssl):
             Class priors (fraction of data belonging to each class). If provided, the predict function
             will attempt to automatic balance the label predictions to predict the correct number of
             nodes in each class.
-        solver : {'spectral', 'conjugate_gradient', 'gradient_descent'} (optional), default='conjugate_gradient'
-            Choice of solver for Poisson learning.
-        p : int (optional), default=1
-            Power for Laplacian, can be any positive real number. Solver will default to 'spectral' if p!=1.
-        use_cuda : bool (optional), default=False
-            Whether to use GPU acceleration for gradient descent solver.
         min_iter : int (optional), default=50
             Minimum number of iterations of gradient descent before checking stopping condition.
         max_iter : int (optional), default=1000
             Maximum number of iterations of gradient descent.
         tol : float (optional), default=1e-3
             Tolerance for conjugate gradient solver.
-        spectral_cutoff : int (optional), default=10
-            Number of eigenvectors to use for spectral solver.
 
         Examples
         --------
@@ -76,25 +67,11 @@ class AlteredPoisson(ssl):
         Proceedings of the 37th International Conference on Machine Learning, PMLR 119:1306-1316, 2020.
         """
         super().__init__(W, class_priors)
-        if solver not in ['conjugate_gradient', 'spectral', 'gradient_descent']:
-            sys.exit("Invalid Poisson solver")
-        self.solver = solver
-        self.p = p
-        if p != 1:
-            self.solver = 'spectral'
-        self.use_cuda = use_cuda
-        self.min_iter = min_iter
-        self.max_iter = max_iter
+        # Only keep conjugate gradient solver as the other solvers are more difficult to compute for signed graphs.
         self.tol = tol
-        self.spectral_cutoff = spectral_cutoff
 
         #Setup accuracy filename
         fname = '_poisson' 
-        if self.p != 1:
-            fname += '_p%.2f'%p
-        if self.solver == 'spectral':
-            fname += '_N%d'%self.spectral_cutoff
-            self.requries_eig = True
         self.accuracy_filename = fname
 
         #Setup Algorithm name
@@ -112,16 +89,13 @@ class AlteredPoisson(ssl):
             raise AttributeError(
                 "Graph object has no adjacency matrix (expected .W, .A, or .weight_matrix)"
             )
-
         W = W.tocsr()
-        abs_deg = np.array(np.abs(W).sum(axis=1)).flatten()
-        D = sparse.spdiags(abs_deg, 0, W.shape[0], W.shape[1])
-        L = D - W
-
+        abs_deg = np.asarray(np.abs(W).sum(axis=1)).ravel()
+        D_abs = sparse.diags(abs_deg)
+        L = D_abs - W
         if normalization == "normalized":
             D_inv_sqrt = sparse.diags(1.0 / np.sqrt(abs_deg + 1e-10))
             L = D_inv_sqrt @ L @ D_inv_sqrt
-
         return L
     
     @staticmethod
@@ -136,105 +110,45 @@ class AlteredPoisson(ssl):
             raise AttributeError(
                 "Graph object has no adjacency matrix (expected .W, .A, or .weight_matrix)"
             )
-        W = W.tocsr()
-        abs_deg = np.array(np.abs(W).sum(axis=1)).flatten()
-        D = sparse.diags((abs_deg + 1e-10) ** p)
 
-        return D
+        W = W.tocsr()
+        abs_deg = np.asarray(np.abs(W).sum(axis=1)).ravel()
+
+        return sparse.diags((abs_deg + 1e-10) ** p)
 
     def _fit(self, train_ind, train_labels, all_labels=None):
         assert np.isin(train_labels, [-1, 1]).all()
 
         n = self.graph.num_nodes # type: ignore
-        unique_labels = np.unique(train_labels)
-        k = len(unique_labels)
-        
-        #Zero out diagonal for faster convergence
         W = self.graph.weight_matrix # type: ignore
+        #Zero out diagonal for faster convergence
         W = W - sparse.spdiags(W.diagonal(),0,n,n)
         G = gl.graph(W)
 
         #Poisson source term
-        onehot = np.zeros((len(train_labels), k))
+        onehot = np.zeros((len(train_labels), 2))
         onehot[train_labels == -1, 0] = 1
         onehot[train_labels == 1, 1] = 1
-        source = np.zeros((n, k))
+        source = np.zeros((n, 2))
         source[train_ind] = onehot - np.mean(onehot, axis=0)
                 
-        if self.solver == 'conjugate_gradient':  #Conjugate gradient solver
-            # Use signed Laplacian as graph contains negative weights.
+        #Conjugate gradient solver
+        #Use signed Laplacian as graph contains negative weights.
 
-            L = self.signed_laplacian(G, normalization='normalized')
-            # compute abs degree matrix for preconditioning with D^-0.5
-            D = self.signed_degree_matrix(G, p=-0.5) 
-            u = utils.conjgrad(L, D*source, tol=self.tol)
-            u = D*u
+        
+        L = self.signed_laplacian(G, normalization='combinatorial')
+        L = L + 1e-6 * sparse.eye(n)
+        # compute abs degree matrix for preconditioning with D^-0.5
+        D = self.signed_degree_matrix(G, p=-0.5) 
+        u = utils.conjgrad(L, D@source, tol=self.tol)
+        u = D@u
 
-        elif self.solver == "gradient_descent":
-            #Setup matrices
-            D = self.signed_degree_matrix(G, p=-1)
-            P = D*W.transpose()
-            Db = D*source
-
-            #Invariant distribution
-            v = np.zeros(n)
-            v[train_ind]=1
-            v = v/np.sum(v)
-            deg = G.degree_vector()
-            vinf = deg/np.sum(deg)
-            RW = W.transpose()*D
-            u = np.zeros((n,k))
-
-            #Number of iterations
-            T = 0
-            if self.use_cuda:
-
-                import torch 
-
-                Pt = utils.torch_sparse(P).cuda()
-                ut = torch.from_numpy(u).float().cuda()
-                Dbt = torch.from_numpy(Db).float().cuda()
-
-                while (T < self.min_iter or np.max(np.absolute(v-vinf)) > 1/n) and (T < self.max_iter):
-                    ut = torch.sparse.addmm(Dbt,Pt,ut)
-                    v = RW*v
-                    T = T + 1
-
-                #Transfer to CPU and convert to numpy
-                u = ut.cpu().numpy()
-
-            else: #Use CPU
-
-                while (T < self.min_iter or np.max(np.absolute(v-vinf)) > 1/n) and (T < self.max_iter):
-                    u = Db + P*u
-                    v = RW*v
-                    T = T + 1
-
-                    #Compute accuracy if all labels are provided
-                    if all_labels is not None:
-                        self.prob = u
-                        labels = self.predict()
-                        acc = gl.ssl.ssl_accuracy(labels,all_labels,train_ind)
-                        print('%d,Accuracy = %.2f'%(T,acc))
-                
-        #Use spectral solver
-        elif self.solver == 'spectral':
-
-            vals, vecs = G.eigen_decomp(normalization='randomwalk', k=self.spectral_cutoff+1)
-            V = vecs[:,1:]
-            vals = vals[1:]
-            if self.p != 1:
-                vals = vals**self.p
-            L = sparse.spdiags(1/vals, 0, self.spectral_cutoff, self.spectral_cutoff)
-            u = V@(L@(V.T@source))
-
-        else:
-            sys.exit("Invalid Poisson solver " + self.solver)
+        #Took out spectral and gredient descent solvers as they are more difficult to compute for signed graphss
 
         # convert to (n, 1) vector of entries in [-1, 1] by taking difference of max two entries and normalizing
         # if entry is < 0, predict -1, if entry is > 0, predict +1
-        u = u[:, 1] - u[:, 0]
-        max_abs = np.max(np.abs(u))
+        score = u[:, 1] - u[:, 0]
+        max_abs = np.max(np.abs(score))
         if max_abs > 0:
-            u = u / max_abs
-        return u
+            score = score / max_abs
+        return score

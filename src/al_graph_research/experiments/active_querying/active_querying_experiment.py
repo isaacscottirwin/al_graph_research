@@ -18,6 +18,7 @@ class ActiveQueryingExperiment:
         num_queries_per_round: int,
         kernel: str,
         alteration_strategy: str, # "zero" or "negate", "baseline"
+        query_method: str, # "frustration" or "Uncertainty"
         model_type: str, # "laplace" or "poisson"
         specified_starting_seeds: list[list[int]] | None = None, # List of lists of indices for each run, or None to use random selection
         graph_construction_method: str = "partner", # "legacy" or "partner"
@@ -37,6 +38,10 @@ class ActiveQueryingExperiment:
             raise ValueError("alteration_strategy must be 'zero', 'negate' or 'baseline'.")
         else:
             self.alteration_strategy = alteration_strategy
+        if query_method not in {"frustration", "uncertainty"}:
+            raise ValueError("query_method must be 'frustration' or 'uncertainty'.")
+        else:
+            self.query_method = query_method
         self.model_type = model_type
         self.specified_starting_seeds = specified_starting_seeds
         self.graph_construction_method = graph_construction_method
@@ -234,7 +239,7 @@ class ActiveQueryingExperiment:
         run_state.prediction_history.append(prediction.copy())
         acc = self._compute_accuracy(prediction, labels, run_state.y_train)
         run_state.accuracy_history.append(acc)
-        uncertain_nodes = self._get_uncertain_nodes(scores, run_state.labeled_indices)
+        uncertain_nodes = self._get_uncertain_nodes(scores, run_state)
         self._label_uncertain_nodes(run_state, uncertain_nodes, labels)
         run_state.labeled_indices_history.append(run_state.labeled_indices.copy())
         self._update_metrics(run_state, run_state.adjacency, labels)
@@ -272,17 +277,12 @@ class ActiveQueryingExperiment:
                 raise ValueError(f"Unknown alteration strategy: {self.alteration_strategy}")
         return A
     
-    def _get_uncertain_nodes(self, scores: np.ndarray, labeled_indices: list[int]) -> list[int]:
-        score_values = np.asarray(scores).ravel()
-        n = score_values.shape[0]
-
-        unlabeled_mask = np.ones(n, dtype=bool)
-        unlabeled_mask[labeled_indices] = False
-
-        order = np.argsort(np.abs(score_values))
-        order = order[unlabeled_mask[order]]
-
-        return order[:self.num_queries_per_round].astype(int).tolist()
+    def _get_uncertain_nodes(self, scores: np.ndarray, run_state: RunState) -> list[int]:
+        if self.query_method == "uncertainty":
+            return LabelPropagation.uncertainty_score(scores, run_state.labeled_indices, self.num_queries_per_round)
+        else:
+            return LabelPropagation.frustration_score(scores, run_state.labeled_indices, self.num_queries_per_round, run_state.adjacency)
+    
     
     def _label_uncertain_nodes(self, run_state: RunState, uncertain_nodes: list[int], true_labels: np.ndarray) -> None:
         for idx in uncertain_nodes:
