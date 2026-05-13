@@ -1,5 +1,7 @@
 import numpy as np
+from scipy import sparse
 from al_graph_research.models.model import Model
+
 
 class LabelPropagation:
     @staticmethod
@@ -60,31 +62,43 @@ class LabelPropagation:
 
         return order[:num_pts].astype(int).tolist()
     
-    @staticmethod
-    def frustration_score(scores, labeled_indicies, num_pts, adjacency):
-        # assert some assumptions
-        assert adjacency.shape == (len(scores), len(scores))
-        # convert scores into either 1 or -1 
-        # coincidentally classifier_with_vec does this
-        signature_vector = LabelPropagation.classifier_with_vec(scores)
-        frustration_vector = np.zeros(len(signature_vector), dtype=int) 
-        for row in range(len(signature_vector)):
-            #assumes no self loops in graph
-            for col in range(row + 1, len(signature_vector)):
-                if adjacency[row, col] == 0:
-                    continue
-                row_class = signature_vector[row]
-                col_class = signature_vector[col]
-                if row_class != col_class and adjacency[row, col] > 0:
-                    frustration_vector[row] += 1
-                    frustration_vector[col] += 1
+    
 
+    @staticmethod
+    def frustration_score(scores, labeled_indices, num_pts, adjacency):
+        assert adjacency.shape == (len(scores), len(scores))
+
+        # Compute the predicted labels for all points based on the sign of the scores
+        signature_vector = LabelPropagation.classifier_with_vec(scores)
+        frustration_vector = np.zeros(len(signature_vector), dtype=int)
+ 
+        # Use sparse matrix operations
+        A_upper = sparse.triu(adjacency, k=1).tocoo()
+
+        rows = A_upper.row
+        cols = A_upper.col
+        weights = A_upper.data
+
+        frustrated = (
+            (weights > 0)
+            & (signature_vector[rows] != signature_vector[cols])
+        )
+
+        frustrated_rows = rows[frustrated]
+        frustrated_cols = cols[frustrated]
+
+        np.add.at(frustration_vector, frustrated_rows, 1)
+        np.add.at(frustration_vector, frustrated_cols, 1)
+
+        # only consider unlabeled points
         unlabeled_mask = np.ones(len(signature_vector), dtype=bool)
-        unlabeled_mask[labeled_indicies] = False
-        # I want the most "frustrated" nodes
+        unlabeled_mask[labeled_indices] = False
+
+        # Sort points by frustration score in descending order, then filter to only unlabeled points
         order = np.argsort(-frustration_vector)
         order = order[unlabeled_mask[order]]
         
+        # should already be int, but just to be safe
         return order[:num_pts].astype(int).tolist()
 
     

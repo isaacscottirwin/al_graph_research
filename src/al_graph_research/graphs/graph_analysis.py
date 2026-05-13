@@ -232,7 +232,14 @@ class GraphAnalysis:
     @staticmethod
     def signed_modularity_score_for_partition(A, labels):
         """
-        Compute a signed modularity score for a given binary partition.
+        Compute an experimental signed modularity score for a given binary partition.
+
+        Warning
+        -------
+        This implementation should be treated as experimental and likely not fully
+        correct yet. It is included as a placeholder/debugging metric rather than as a
+        validated signed modularity implementation. Use its output cautiously and do
+        not rely on it for final conclusions without further verification.
 
         Mathematical background
         -----------------------
@@ -245,66 +252,43 @@ class GraphAnalysis:
             A^+_ij = max(A_ij, 0),
             A^-_ij = max(-A_ij, 0).
 
-        Define the positive and negative degree vectors by
+        For a bipartition encoded by a sign vector s in {-1, 1}^n, the intended score
+        is based on a signed modularity matrix of the form
 
-            k_i^+ = sum_j A^+_ij,
-            k_i^- = sum_j A^-_ij,
-
-        and let
-
-            2m^+ = sum_i k_i^+,
-            2m^- = sum_i k_i^-.
-
-        A standard signed modularity matrix is
-
-            B_s
-            =
-            (A^+ - (k^+ (k^+)^T) / (2m^+))
+            B_s =
+            (A^+ - expected positive edges)
             -
-            (A^- - (k^- (k^-)^T) / (2m^-)).
+            (A^- - expected negative edges).
 
-        Equivalently,
-
-            B_s
-            =
-            A
-            - (k^+ (k^+)^T) / (2m^+)
-            + (k^- (k^-)^T) / (2m^-).
-
-        For a bipartition encoded by a sign vector s in {-1,1}^n, this method
-        computes
-
-            Q = (1 / 4) s^T B_s s.
-
-        Expanding gives
-
-            Q = (1 / 4) [
-                    s^T A s
-                    - (s^T k^+)^2 / (2m^+)
-                    + (s^T k^-)^2 / (2m^-)
-                ],
-
-        where the positive and negative correction terms are included only when
-        m^+ > 0 and m^- > 0, respectively.
+        In this implementation, the score is computed using a quadratic form involving
+        the signed adjacency matrix and positive/negative degree correction terms.
+        However, the normalization and null-model terms may not match the signed
+        modularity definition needed for this project.
 
         Parameters
         ----------
         A : scipy.sparse.spmatrix
             Sparse adjacency matrix of shape (n, n).
+
         labels : array-like of shape (n,)
-            Binary node labels defining the partition. 
-            - entries in {-1, 1}.
+            Binary node labels defining the partition. Entries should be in {-1, 1}.
 
         Returns
         -------
         Q : float
-            Signed modularity score of the given partition.
+            Experimental signed modularity-like score for the given partition.
 
         Raises
         ------
         ValueError
-            If the graph is invalid, if the adjacency matrix is not symmetric, if
-            the graph has no edges, or if the labels are invalid.
+            If the graph is invalid, if the adjacency matrix is not symmetric, if the
+            graph has no edges, or if the labels are invalid.
+
+        Notes
+        -----
+        This metric should mainly be used for exploratory diagnostics. Before using it
+        as a reported metric, verify the signed modularity formula, the factor in front
+        of the quadratic form, and the treatment of positive and negative edge totals.
         """
         
         if A is None:

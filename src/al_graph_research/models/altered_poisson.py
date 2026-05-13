@@ -5,61 +5,65 @@ import graphlearning.utils as utils
 import numpy as np
 
 class AlteredPoisson(ssl):
-    def __init__(self, W=None, class_priors=None, tol=1e-3):
-        """Poisson Learning
-        ===================
+    def __init__(self, W=None, class_priors=None, tol=1e-3, normalization="normalized"):
+        """    
+        Signed Poisson Learning
+        =======================
 
-        Semi-supervised learning via the solution of the Poisson equation 
-        \\[L^p u = \\sum_{j=1}^m \\delta_j(y_j - \\overline{y})^T,\\]
-        where \\(L=D-W\\) is the combinatorial graph Laplacian, 
-        \\(y_j\\) are the label vectors, \\(\\overline{y} = \\frac{1}{m}\\sum_{i=1}^m y_j\\) 
-        is the average label vector, \\(m\\) is the number of training points, and 
-        \\(\\delta_j\\) are standard basis vectors. See the reference for more details.
+        Semi-supervised learning on a signed graph using a signed graph Laplacian.
 
-        Implements 3 different solvers, spectral, gradient_descent, and conjugate_gradient. 
-        GPU acceleration is available for gradient descent. See [1] for details.
+        This model solves a Poisson-type graph equation using the signed Laplacian
+
+            L_signed = D_abs - W,
+
+        where W is a possibly signed adjacency matrix and D_abs is the diagonal
+        matrix of absolute degrees,
+
+            D_abs[i, i] = sum_j |W[i, j]|.
+
+        The label information is encoded as a source term supported only on the
+        labeled nodes. For binary labels {-1, +1}, labels are converted to a
+        two-column one-hot representation, centered by subtracting the average
+        labeled one-hot vector, and then propagated through the signed graph.
+
+        This implementation only uses a conjugate-gradient solve. The spectral
+        and gradient-descent solvers from the original unsigned Poisson learning
+        implementation are intentionally omitted because they require additional
+        care for signed graphs.
+
+        After solving for the two-column Poisson solution u, the output is converted
+        to a scalar score vector by taking
+
+            score = u[:, 1] - u[:, 0].
+
+        The score is then normalized to lie in [-1, 1]. Positive scores correspond
+        to class +1, and negative scores correspond to class -1.
 
         Parameters
         ----------
-        W : numpy array, scipy sparse matrix, or graphlearning graph object (optional), default=None
-            Weight matrix representing the graph.
-        class_priors : numpy array (optional), default=None
-            Class priors (fraction of data belonging to each class). If provided, the predict function
-            will attempt to automatic balance the label predictions to predict the correct number of
-            nodes in each class.
-        min_iter : int (optional), default=50
-            Minimum number of iterations of gradient descent before checking stopping condition.
-        max_iter : int (optional), default=1000
-            Maximum number of iterations of gradient descent.
-        tol : float (optional), default=1e-3
-            Tolerance for conjugate gradient solver.
+        W : numpy array, scipy sparse matrix, or graphlearning graph object, optional
+            Weight matrix representing the graph. The matrix may contain positive
+            and negative edge weights.
 
-        Examples
-        --------
-        Poisson learning works on directed (i.e., nonsymmetric) graphs with the gradient descent solver: [poisson_directed.py](https://github.com/jwcalder/GraphLearning/blob/master/examples/poisson_directed.py).
-        ```py
-        import numpy as np
-        import graphlearning as gl
-        import matplotlib.pyplot as plt
-        import sklearn.datasets as datasets
+        class_priors : numpy array, optional
+            Class priors. Passed to the parent graphlearning SSL class.
 
-        X,labels = datasets.make_moons(n_samples=500,noise=0.1)
-        W = gl.weightmatrix.knn(X,10,symmetrize=False)
+        normalization : {"combinatorial", "normalized"}, default="normalized"
+            Which signed Laplacian normalization to use.
 
-        train_ind = gl.trainsets.generate(labels, rate=5)
-        train_labels = labels[train_ind]
+            If "combinatorial", the model solves approximately
+                L_signed u = source.
+            A small diagonal regularization is added to improve numerical stability.
 
-        model = gl.ssl.poisson(W, solver='gradient_descent')
-        pred_labels = model.fit_predict(train_ind, train_labels)
+            If "normalized", the model uses
+                L_norm = D_abs^{-1/2} L_signed D_abs^{-1/2}
+            and solves the normalized system following the structure of the original
+            graphlearning Poisson conjugate-gradient solver.
 
-        accuracy = gl.ssl.ssl_accuracy(pred_labels, labels, train_ind)   
-        print("Accuracy: %.2f%%"%accuracy)
+        tol : float, default=1e-3
+            Tolerance for the conjugate-gradient solver.
 
-        plt.scatter(X[:,0],X[:,1], c=pred_labels)
-        plt.scatter(X[train_ind,0],X[train_ind,1], c='r')
-        plt.show()
-        ```
-
+        
         Reference
         ---------
         [1] J. Calder, B. Cook, M. Thorpe, D. Slepcev. [Poisson Learning: Graph Based Semi-Supervised
@@ -67,18 +71,39 @@ class AlteredPoisson(ssl):
         Proceedings of the 37th International Conference on Machine Learning, PMLR 119:1306-1316, 2020.
         """
         super().__init__(W, class_priors)
-        # Only keep conjugate gradient solver as the other solvers are more difficult to compute for signed graphs.
         self.tol = tol
+        if normalization not in ["combinatorial", "normalized"]:
+            raise ValueError("Normalization must be 'combinatorial' or 'normalized'")
+        self.normalization = normalization
+        self.accuracy_filename = f"_poisson_{normalization}"
+        self.name = f"Signed Poisson Learning ({normalization})"
 
-        #Setup accuracy filename
-        fname = '_poisson' 
-        self.accuracy_filename = fname
-
-        #Setup Algorithm name
-        self.name = 'Poisson Learning'
-    
     @staticmethod
     def signed_laplacian(G, normalization="combinatorial"):
+        """
+        Construct the signed graph Laplacian.
+        The signed Laplacian is defined as
+            L_signed = D_abs - W,
+        where W is the signed adjacency matrix and D_abs is the diagonal matrix
+        of absolute degrees,
+            D_abs[i, i] = sum_j |W[i, j]|.
+        If normalization="normalized", this returns the normalized signed Laplacian
+            L_norm = D_abs^{-1/2} L_signed D_abs^{-1/2}.
+
+        Parameters
+        ----------
+        G : graph-like object
+            Graph object containing an adjacency matrix. The method checks for
+            one of the attributes .W, .A, or .weight_matrix.
+
+        normalization : {"combinatorial", "normalized"}, default="combinatorial"
+            Type of signed Laplacian to return.
+
+        Returns
+        -------
+        scipy sparse matrix
+            The signed graph Laplacian.
+        """
         if hasattr(G, "W") and G.W is not None:
             W = G.W
         elif hasattr(G, "A") and G.A is not None:
@@ -100,6 +125,29 @@ class AlteredPoisson(ssl):
     
     @staticmethod
     def signed_degree_matrix(G, p=1.0):
+        """
+        Construct a power of the signed absolute degree matrix.
+        The signed absolute degree matrix is
+            D_abs[i, i] = sum_j |W[i, j]|.
+        This method returns
+            D_abs^p.
+        For example, p=-0.5 gives D_abs^{-1/2}, which is used with the normalized
+        signed Laplacian.
+
+        Parameters
+        ----------
+        G : graph-like object
+            Graph object containing an adjacency matrix. The method checks for
+            one of the attributes .W, .A, or .weight_matrix.
+
+        p : float, default=1.0
+            Power applied to the absolute degree entries.
+
+        Returns
+        -------
+        scipy sparse diagonal matrix
+            The diagonal matrix D_abs^p.
+        """
         if hasattr(G, "W") and G.W is not None:
             W = G.W
         elif hasattr(G, "A") and G.A is not None:
@@ -116,7 +164,40 @@ class AlteredPoisson(ssl):
 
         return sparse.diags((abs_deg + 1e-10) ** p)
 
-    def _fit(self, train_ind, train_labels, all_labels=None):
+    def _fit(self, train_ind, train_labels):
+        """
+        Fit signed Poisson learning scores from labeled training nodes.
+        The method assumes binary labels in {-1, +1}. Labels are converted into
+        a two-column one-hot source term, centered by subtracting the average
+        labeled one-hot vector. The resulting source is then propagated through
+        either the combinatorial or normalized signed Laplacian.
+
+        For normalized signed Poisson, this solves
+            L_norm v = D_abs^{-1/2} source,
+        then converts back using
+            u = D_abs^{-1/2} v.
+        For combinatorial signed Poisson, this solves
+            (L_signed + eps I) u = source,
+        where eps is a small regularization parameter used to improve numerical
+        stability.
+        The two-column output is converted to a scalar score by
+            score = u[:, 1] - u[:, 0],
+        and normalized to lie in [-1, 1].
+
+        Parameters
+        ----------
+        train_ind : array-like
+            Indices of labeled training nodes.
+
+        train_labels : array-like
+            Binary labels for the training nodes. Must contain only -1 and +1.
+
+        Returns
+        -------
+        numpy.ndarray
+            Score vector of shape (n,). Positive scores predict class +1 and
+            negative scores predict class -1.
+        """
         assert np.isin(train_labels, [-1, 1]).all()
 
         n = self.graph.num_nodes # type: ignore
@@ -135,13 +216,15 @@ class AlteredPoisson(ssl):
         #Conjugate gradient solver
         #Use signed Laplacian as graph contains negative weights.
 
-        
-        L = self.signed_laplacian(G, normalization='combinatorial')
-        L = L + 1e-6 * sparse.eye(n)
-        # compute abs degree matrix for preconditioning with D^-0.5
-        D = self.signed_degree_matrix(G, p=-0.5) 
-        u = utils.conjgrad(L, D@source, tol=self.tol)
-        u = D@u
+        L = self.signed_laplacian(G, normalization=self.normalization)
+
+        if self.normalization == "normalized":
+            D = self.signed_degree_matrix(G, p=-0.5)
+            u = utils.conjgrad(L, D @ source, tol=self.tol)
+            u = D @ u
+        elif self.normalization == "combinatorial":
+            L = L + 1e-6 * sparse.eye(n)
+            u = utils.conjgrad(L, source, tol=self.tol)
 
         #Took out spectral and gredient descent solvers as they are more difficult to compute for signed graphss
 

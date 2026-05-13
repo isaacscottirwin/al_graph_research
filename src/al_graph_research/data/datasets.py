@@ -135,7 +135,7 @@ class GaussianDataset:
         ndarray of shape (n_blobs, 2)
             Array of 2D cluster means.
         """
-        angles = np.linspace(0.0, 2.0 * np.pi, n_blobs, endpoint=False)
+        angles = np.linspace(0.0, 2.0 * np.pi, n_blobs, endpoint=False, retstep=False)
         return np.column_stack((radius * np.cos(angles), radius * np.sin(angles)))
 
     def _generate(self):

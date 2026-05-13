@@ -79,13 +79,13 @@ class Metrics:
         """
         H = np.stack(history)  # (T, n)
 
-        # --- Sign alignment ---
+        # Sign alignment to ensure temporal consistency of eigenvector directions
         H_aligned = H.copy()
         for t in range(1, H.shape[0]):
             if np.dot(H_aligned[t - 1], H_aligned[t]) < 0:
                 H_aligned[t] *= -1
 
-        # --- Sorting ---
+        # Sorting each vector independently at each time step
         order = np.argsort(H_aligned, axis=1)
         if descending:
             order = order[:, ::-1]

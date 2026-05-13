@@ -37,7 +37,7 @@ class KNNGraph:
 
         self.create_graph(data, kernal, number_neigbors, construction_method)
 
-    def create_graph(self, data, kernal, number_neighbors, construction_method: str = "legacy"):
+    def create_graph(self, data, kernal, number_neighbors, construction_method: str = "partner"):
         """
         Construct a k-nearest neighbor graph from input data.
 

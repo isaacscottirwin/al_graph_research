@@ -1,10 +1,29 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
-from mpl_toolkits.mplot3d import Axes3D
 
 
 def dataset_visualization(data, labels):
+    """
+    Visualize a two-dimensional dataset before and after labels are applied.
+
+    The first plot shows all data points in gray, treating the dataset as
+    unlabeled. The second plot colors the points according to their binary labels,
+    using red for -1 and blue for +1.
+
+    Parameters
+    ----------
+    data : array-like of shape (n_samples, 2)
+        Two-dimensional data points to plot.
+
+    labels : array-like of shape (n_samples,)
+        Binary labels for the data points. Expected values are -1 and +1.
+
+    Returns
+    -------
+    None
+        Displays the plots directly.
+    """
     plt.scatter(np.array(data)[:, 0], np.array(data)[:, 1], c="gray")
     plt.title("Unlabeled Data")
     plt.show()
@@ -17,6 +36,28 @@ def dataset_visualization(data, labels):
     plt.show()
 
 def plot_embedding_with_labels(emb, labels, title="Embedding with True Labels"):
+    """
+    Plot a two-dimensional embedding colored by true binary labels.
+
+    This function is useful for visualizing spectral embeddings, Laplacian
+    eigenmap coordinates, or any other two-dimensional node embedding.
+
+    Parameters
+    ----------
+    emb : numpy.ndarray of shape (n_samples, 2)
+        Two-dimensional embedding coordinates.
+
+    labels : array-like of shape (n_samples,)
+        Binary labels for each embedded point. Expected values are -1 and +1.
+
+    title : str, default="Embedding with True Labels"
+        Title displayed above the plot.
+
+    Returns
+    -------
+    None
+        Displays the plot directly.
+    """
     c_map = {-1: 'red', 1: 'blue'}
     color_arr = [c_map[label] for label in labels]
     plt.scatter(emb[:, 0], emb[:, 1], c=color_arr)
@@ -27,17 +68,31 @@ def plot_embedding_with_labels(emb, labels, title="Embedding with True Labels"):
 
 def plot_metric(result, attr_name, label=None, show_std=True):
     """
-    Plot a metric stored in RunState histories.
+    Plot the mean history of a metric across experiment runs.
+
+    The metric is read from an ExperimentResult object using its `mean_metric` and
+    `std_metric` methods. Optionally, the plot includes a shaded band showing one
+    standard deviation above and below the mean.
 
     Parameters
     ----------
     result : ExperimentResult
+        Object storing metric histories across one or more experiment runs.
+
     attr_name : str
-        Name of the history attribute (e.g. "accuracy_history", "lam2_history")
+        Name of the metric history attribute to plot, such as
+        "accuracy_history" or "lam2_history".
+
     label : str, optional
-        Label for legend
-    show_std : bool
-        Whether to show standard deviation band
+        Label used in the plot legend.
+
+    show_std : bool, default=True
+        If True, display mean ± standard deviation shading.
+
+    Returns
+    -------
+    None
+        Adds the metric plot to the current matplotlib axes.
     """
     mean = result.mean_metric(attr_name)
     std = result.std_metric(attr_name)
@@ -51,15 +106,33 @@ def plot_metric(result, attr_name, label=None, show_std=True):
 
 def plot_metric_comparison(results, attr_name, labels, title=None, show_std=True):
     """
-    Compare a metric across multiple experiments.
+    Compare the same metric across multiple experiment results.
+
+    Each ExperimentResult is plotted as a separate curve. The metric is read using
+    the provided attribute name, and optional standard deviation shading can be
+    included for each experiment.
 
     Parameters
     ----------
     results : list[ExperimentResult]
+        Experiment result objects to compare.
+
     attr_name : str
+        Name of the metric history attribute to plot.
+
     labels : list[str]
+        Legend labels corresponding to each experiment result.
+
     title : str, optional
-    show_std : bool
+        Title displayed above the plot.
+
+    show_std : bool, default=True
+        If True, display mean ± standard deviation shading.
+
+    Returns
+    -------
+    None
+        Displays the comparison plot directly.
     """
     plt.figure(figsize=(8, 5))
 
@@ -85,18 +158,30 @@ def plot_metric_comparison(results, attr_name, labels, title=None, show_std=True
 
 def plot_same_metric_comparison(result, attr_names, title=None, show_std=True):
     """
-    Compare multiple metrics from the same ExperimentResult.
+    Compare multiple metric histories from the same experiment result.
+
+    Each attribute name is plotted as a separate curve using the mean metric history
+    stored in the ExperimentResult object. Optional standard deviation shading can
+    be included for each metric.
 
     Parameters
     ----------
     result : ExperimentResult
-        The experiment result object.
+        Experiment result object containing the metric histories.
+
     attr_names : list[str]
-        List of metric attribute names to plot.
+        Names of the metric history attributes to compare.
+
     title : str, optional
-        Title for the plot.
-    show_std : bool
-        If True, plot mean +/- std shading.
+        Title displayed above the plot.
+
+    show_std : bool, default=True
+        If True, display mean ± standard deviation shading.
+
+    Returns
+    -------
+    None
+        Displays the comparison plot directly.
     """
     plt.figure(figsize=(8, 5))
 
@@ -122,6 +207,39 @@ def plot_same_metric_comparison(result, attr_names, title=None, show_std=True):
 
 
 def animate_embedding_history(run_state, true_labels, save_path=None, dims=2):
+    """
+    Animate an embedding history over time.
+
+    Each frame shows the embedding at one experiment step. Points are colored by
+    their true labels, and currently labeled points are highlighted with black
+    outline markers. The animation supports both two-dimensional and
+    three-dimensional embeddings.
+
+    Parameters
+    ----------
+    run_state : RunState
+        Object containing `embedding_history` and labeled index information.
+
+    true_labels : array-like of shape (n_samples,)
+        True labels used to color the embedded points.
+
+    save_path : str, optional
+        If provided, path where the animation should be saved.
+
+    dims : {2, 3}, default=2
+        Number of embedding dimensions to visualize.
+
+    Returns
+    -------
+    matplotlib.animation.FuncAnimation
+        Animation object showing the embedding evolution over time.
+
+    Raises
+    ------
+    ValueError
+        If `dims` is not 2 or 3, if the embedding history is empty, or if the
+        embedding does not contain enough dimensions.
+    """
     embeddings = run_state.embedding_history
     labels = np.asarray(true_labels)
 
@@ -201,6 +319,42 @@ def animate_embedding_history(run_state, true_labels, save_path=None, dims=2):
 
 
 def animate_embedding_true_vs_pred(run_state, true_labels, save_path=None, dims=2):
+    """
+    Animate true labels and predicted labels side by side over time.
+
+    Each frame shows the current embedding in two panels. The left panel colors
+    points by their true labels, while the right panel colors points by the model's
+    predicted labels. Currently labeled points are highlighted with black outline
+    markers. The animation supports both two-dimensional and three-dimensional
+    embeddings.
+
+    Parameters
+    ----------
+    run_state : RunState
+        Object containing `embedding_history`, `prediction_history`, and labeled
+        index information.
+
+    true_labels : array-like of shape (n_samples,)
+        True labels for all points.
+
+    save_path : str, optional
+        If provided, path where the animation should be saved.
+
+    dims : {2, 3}, default=2
+        Number of embedding dimensions to visualize.
+
+    Returns
+    -------
+    matplotlib.animation.FuncAnimation
+        Animation object comparing true and predicted labels over time.
+
+    Raises
+    ------
+    ValueError
+        If `dims` is not 2 or 3, if the embedding and prediction histories have
+        different lengths, if the embedding history is empty, or if the embedding
+        does not contain enough dimensions.
+    """
     embeddings = run_state.embedding_history
     predictions = run_state.prediction_history
     true_labels = np.asarray(true_labels)
@@ -380,12 +534,69 @@ def animate_embedding_true_vs_pred(run_state, true_labels, save_path=None, dims=
     return anim
 
 def get_labeled(frame, run_state):
+    """
+    Return the labeled node indices for a given animation frame.
+
+    If the run state stores a full labeled-index history, this function returns the
+    labeled indices from the requested frame. Otherwise, it returns the final/static
+    labeled index set stored on the run state.
+
+    Parameters
+    ----------
+    frame : int
+        Animation frame or experiment step.
+
+    run_state : RunState
+        Object containing either `labeled_indices_history` or `labeled_indices`.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array of labeled node indices for the requested frame.
+    """
     if hasattr(run_state, "labeled_indices_history"):
         return np.asarray(run_state.labeled_indices_history[frame], dtype=int)
     return np.asarray(run_state.labeled_indices, dtype=int)
 
 def animate_eigenvectors_over_time(eigenvector_one_history, eigenvector_two_history, eigenvector_three_history, 
                                    eigenvector_four_history, title="Eigenvectors over Time", save_path=None):
+    """
+    Animate the first four eigenvector histories over time.
+
+    Each frame plots four eigenvectors as curves over sorted node index. The y-axis
+    limits are fixed across the full animation so that changes in eigenvector shape
+    can be compared consistently over time.
+
+    Parameters
+    ----------
+    eigenvector_one_history : sequence of array-like
+        History of the first eigenvector.
+
+    eigenvector_two_history : sequence of array-like
+        History of the second eigenvector.
+
+    eigenvector_three_history : sequence of array-like
+        History of the third eigenvector.
+
+    eigenvector_four_history : sequence of array-like
+        History of the fourth eigenvector.
+
+    title : str, default="Eigenvectors over Time"
+        Base title for the animation.
+
+    save_path : str, optional
+        If provided, path where the animation should be saved.
+
+    Returns
+    -------
+    matplotlib.animation.FuncAnimation
+        Animation object showing eigenvector evolution over time.
+
+    Raises
+    ------
+    AssertionError
+        If the eigenvector histories do not all have the same length.
+    """
     assert (
         len(eigenvector_one_history)
         == len(eigenvector_two_history)
