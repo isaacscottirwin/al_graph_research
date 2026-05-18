@@ -18,28 +18,6 @@ The repository studies binary classification on signed graphs where:
 {-1, +1}
 ```
 
-- Unlabeled nodes are represented by:
-
-```python
-0
-```
-
-The primary graph operator used throughout the repository is the signed Laplacian
-
-```math
-L_{\mathrm{signed}} = D_{|\!A\!|} - A
-```
-
-where
-
-```math
-D_{|\!A\!|}(i,i) = \sum_j |A_{ij}|.
-```
-
-Both combinatorial and normalized signed Laplacians are supported.
-
----
-
 # Main Components
 
 ## Signed Laplace Learning
@@ -235,12 +213,6 @@ Visualization utilities support:
 - animated embeddings
 - animated prediction trajectories
 
-Animations are implemented using:
-
-```python
-matplotlib.animation.FuncAnimation
-```
-
 Supported visualizations include both 2D and 3D embeddings.
 
 ---
@@ -264,7 +236,7 @@ results/
     Generated outputs, plots, animations, and experiment artifacts.
 
 docs/
-    LaTeX writeup and research documentation.
+    LaTeX (eventually) writeup and research documentation.
 ```
 
 ---
@@ -322,7 +294,7 @@ graphlearning
 
 # Example Workflow
 
-Typical experiment workflow:
+Typical experiment process:
 
 1. Construct dataset
 2. Build kNN graph
@@ -336,49 +308,8 @@ Typical experiment workflow:
 
 ---
 
-# Research Notes
-
-This repository is an active research codebase. Some methods are experimental and still under investigation.
-
-In particular:
-
-- Signed Poisson learning behavior is still being studied.
-- Signed modularity utilities may not yet be mathematically correct.
-- Some graph alteration strategies behave differently than initially expected.
-- Spectral behavior can depend strongly on graph normalization choices.
-
-The codebase prioritizes experimentation and analysis over production stability.
-
----
-
-# Installation
-
-Clone the repository:
-
-```bash
-git clone <repo-url>
-cd <repo-name>
-```
-
-Install in editable mode:
-
-```bash
-pip install -e .
-```
-
----
-
 # Notes
 
-This repository was developed for research into:
-
-- signed graph learning
-- graph signal processing
-- active learning
-- spectral graph theory
-- graph-based semi-supervised learning
-- signed Laplacians
-- uncertainty estimation on graphs
-- graph structure modification
-- spectral embeddings
-- frustration dynamics
+- Signed Poisson learning behavior is still being weird.
+- Signed modularity utilities may not yet be mathematically correct.
+- Some graph alteration strategies behave differently than initially expected.
